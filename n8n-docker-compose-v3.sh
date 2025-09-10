@@ -1,27 +1,25 @@
 #!/bin/sh
-# n8n-setup-ssl.sh  (updated)
-# POSIX sh installer:
-# - prompts user for domain & public IP
-# - verifies DNS resolves to given IP
-# - if verified: creates docker-compose with Caddy (auto TLS) + n8n (HTTPS)
-# - otherwise: creates docker-compose for HTTP n8n with secure-cookie disabled
+# n8n-setup-ssl-fixed.sh
+# POSIX sh installer (updated)
+# Adds permission fixes and recommended env vars:
+# - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
+# - DB_SQLITE_POOL_SIZE=5
+# - N8N_RUNNERS_ENABLED=true
+# - N8N_BLOCK_ENV_ACCESS_IN_NODE=true
 # Usage:
-#   Interactive: sudo sh n8n-setup-ssl.sh
-#   Non-interactive example:
-#     sudo N8N_USER=admin N8N_PASS='Pass123' N8N_SECURE_COOKIE=false sh n8n-setup-ssl.sh
-
+#  sudo sh n8n-setup-ssl-fixed.sh
 set -eu
 
 err() { printf '%s\n' "$*" >&2; }
 info() { printf '%s\n' "$*"; }
 
-# Check docker
+# Check docker presence
 if ! command -v docker >/dev/null 2>&1; then
   err "ERROR: docker not found. Install Docker first."
   exit 1
 fi
 
-# Choose compose command
+# Compose command detection
 DOCKER_COMPOSE_CMD=""
 if docker compose version >/dev/null 2>&1; then
   DOCKER_COMPOSE_CMD="docker compose"
@@ -39,32 +37,30 @@ COMPOSE_DIR="/n8n"
 COMPOSE_FILE="${COMPOSE_DIR}/docker-compose.yml"
 CADDYFILE="${COMPOSE_DIR}/Caddyfile"
 N8N_IMAGE="${N8N_IMAGE:-n8nio/n8n:latest}"
-HOST_HTTP_PORT="${HOST_HTTP_PORT:-5678}"  # host port for HTTP-only mode
-INTERNAL_N8N_PORT="5678"                  # container internal port (n8n default)
+HOST_HTTP_PORT="${HOST_HTTP_PORT:-5678}"
+INTERNAL_N8N_PORT="5678"
 
-# invoking user (for chown)
+# invoking user
 if [ "${SUDO_USER:-}" ]; then
   INVOKING_USER="$SUDO_USER"
 else
   INVOKING_USER="$(whoami 2>/dev/null || echo root)"
 fi
 
-# Read credentials (TTY-safe with env fallback)
-N8N_USER_INPUT=""
-N8N_PASS_INPUT=""
-
+# Read credentials (TTY safe)
+N8N_USER_INPUT=""; N8N_PASS_INPUT=""
 if [ -t 0 ]; then
   printf '🔑 n8n Basic Auth (recommended)\n'
   printf 'Enter n8n username (default: admin): '
   read N8N_USER_INPUT || true
-  printf 'Enter n8n password (hidden, press enter for default "change-me"): '
+  printf 'Enter n8n password (hidden, default "change-me"): '
   stty -echo 2>/dev/null || true
   read N8N_PASS_INPUT || true
   stty echo 2>/dev/null || true
   printf '\n'
 fi
 
-# Final credentials (env override > interactive input > default)
+# Final credentials
 if [ -n "${N8N_USER:-}" ]; then
   N8N_USER_FINAL="$N8N_USER"
 elif [ -n "$N8N_USER_INPUT" ]; then
@@ -81,17 +77,16 @@ else
   N8N_PASS_FINAL="change-me"
 fi
 
-# Force secure cookie env override allowed
+# secure-cookie override optional
 if [ "${N8N_SECURE_COOKIE:-}" = "false" ]; then
   FORCE_SECURE_COOKIE="false"
 else
   FORCE_SECURE_COOKIE=""
 fi
 
-# Inform user
+# Inform
 info ""
-info "NOTE: For proper HTTPS + secure cookies you need a domain (e.g. n8n.example.com) pointing to this server's public IP, and ports 80/443 open."
-info "If you don't have a domain, script can start n8n in HTTP-only mode and disable secure cookies (for testing)."
+info "NOTE: This script will ensure /n8n/data/config has safe permissions and add recommended env vars."
 info ""
 
 # Continue?
@@ -99,41 +94,34 @@ if [ -t 0 ]; then
   printf 'Continue with setup? (y/N): '
   read CONTINUE_ANS || true
   if [ -z "$CONTINUE_ANS" ] || [ "${CONTINUE_ANS%[!yY]*}" != "y" ]; then
-    info "Aborting per user choice."
+    info "Aborting."
     exit 0
   fi
 fi
 
-# Prompt domain and public IP
-DOMAIN_INPUT=""
-PUBLIC_IP_INPUT=""
-
+# Domain + IP prompts (unchanged behaviour)
+DOMAIN_INPUT=""; PUBLIC_IP_INPUT=""
 if [ -t 0 ]; then
-  printf 'Enter your domain name for n8n (leave empty to skip TLS): '
+  printf 'Enter domain for TLS (leave empty for HTTP-only): '
   read DOMAIN_INPUT || true
-  printf 'Enter this instance public IP (leave empty to auto-detect): '
+  printf 'Enter public IP for this instance (leave empty to auto-detect): '
   read PUBLIC_IP_INPUT || true
 fi
-
-# Auto-detect public IP if empty (best-effort)
 if [ -z "$PUBLIC_IP_INPUT" ]; then
   PUBLIC_IP_INPUT="$(hostname -I 2>/dev/null | awk '{print $1}' || echo '')"
 fi
-
-# Trim inputs
 DOMAIN="$(printf '%s' "$DOMAIN_INPUT" | awk '{$1=$1};1')"
 PUBLIC_IP="$(printf '%s' "$PUBLIC_IP_INPUT" | awk '{$1=$1};1')"
 
-info ""
 info "Domain: ${DOMAIN:-<none>}"
-info "Public IP: ${PUBLIC_IP:-<auto-detect or none>}"
+info "Public IP: ${PUBLIC_IP:-<auto>}"
 info ""
 
-# If domain provided, ask whether DNS A record created
+# DNS verify (same logic)
 VERIFY_DNS="no"
 if [ -n "$DOMAIN" ]; then
   if [ -t 0 ]; then
-    printf 'Have you created/updated the DNS A record for %s pointing to %s? (y/N): ' "$DOMAIN" "${PUBLIC_IP:-<unknown>}"
+    printf 'Have you created an A record for %s pointing to %s? (y/N): ' "$DOMAIN" "${PUBLIC_IP:-<unknown>}"
     read DNS_CONFIRM || true
     if [ -n "$DNS_CONFIRM" ] && [ "${DNS_CONFIRM%[!yY]*}" = "y" ]; then
       VERIFY_DNS="yes"
@@ -143,7 +131,6 @@ if [ -n "$DOMAIN" ]; then
   fi
 fi
 
-# DNS verification
 DNS_MATCH="no"
 if [ "$VERIFY_DNS" = "yes" ] && [ -n "$DOMAIN" ]; then
   info "Resolving ${DOMAIN}..."
@@ -158,9 +145,7 @@ if [ "$VERIFY_DNS" = "yes" ] && [ -n "$DOMAIN" ]; then
       RESOLVED_IPS="$(nslookup "$DOMAIN" 2>/dev/null | awk '/^Address: /{print $2}' | tr '\n' ' ' | awk '{$1=$1;print}')"
     fi
   fi
-
   info "Resolved IPs: ${RESOLVED_IPS:-<none>}"
-
   if [ -n "$RESOLVED_IPS" ] && [ -n "$PUBLIC_IP" ]; then
     echo "$RESOLVED_IPS" | tr ' ' '\n' | grep -x "$PUBLIC_IP" >/dev/null 2>&1 && DNS_MATCH="yes" || DNS_MATCH="no"
   elif [ -n "$RESOLVED_IPS" ]; then
@@ -170,17 +155,16 @@ if [ "$VERIFY_DNS" = "yes" ] && [ -n "$DOMAIN" ]; then
   else
     DNS_MATCH="no"
   fi
-
   if [ "$DNS_MATCH" = "yes" ]; then
-    info "DNS OK: ${DOMAIN} -> ${PUBLIC_IP}"
+    info "DNS OK"
   else
-    err "DNS MISMATCH or resolution failed for ${DOMAIN}."
+    err "DNS mismatch or resolution failed."
     if [ -t 0 ]; then
-      printf 'Choose: (A) abort, (B) start HTTP-only, (C) attempt TLS anyway [B]: '
+      printf 'Choose: (A) abort, (B) http-only, (C) try TLS anyway [B]: '
       read DNS_CHOICE || true
       case "${DNS_CHOICE:-B}" in
         A|a) info "Aborting."; exit 0 ;;
-        C|c) info "Attempting TLS anyway (may fail)";;
+        C|c) info "Attempting TLS (may fail)";;
         *) info "Proceeding HTTP-only"; DNS_MATCH="no" ;;
       esac
     else
@@ -190,8 +174,8 @@ if [ "$VERIFY_DNS" = "yes" ] && [ -n "$DOMAIN" ]; then
   fi
 fi
 
-# Prepare directories
-info "Preparing directories..."
+# Prepare dirs
+info "Preparing /n8n dirs..."
 sudo mkdir -p "$DATA_DIR" "$BACKUP_DIR" "$COMPOSE_DIR"
 sudo chown -R "${INVOKING_USER}:${INVOKING_USER}" /n8n
 sudo chmod 755 /n8n
@@ -199,11 +183,24 @@ sudo chown -R "${INVOKING_USER}:${INVOKING_USER}" "$DATA_DIR" "$BACKUP_DIR"
 sudo chmod 700 "$DATA_DIR" || true
 sudo chmod 700 "$BACKUP_DIR" || true
 
-# If DNS matched and domain provided -> TLS mode with Caddy
-if [ "$DNS_MATCH" = "yes" ] && [ -n "$DOMAIN" ]; then
-  info "Writing compose with Caddy (auto TLS)..."
+# === NEW: ensure settings file perms are safe if exists ===
+# Common config path inside host volume: /n8n/data/config
+HOST_CONFIG_PATH="${DATA_DIR}/config"
+if [ -f "$HOST_CONFIG_PATH" ]; then
+  info "Found settings file at ${HOST_CONFIG_PATH}. Fixing ownership/permissions..."
+  # try to set owner to invoking user, and mode 600
+  sudo chown "${INVOKING_USER}:${INVOKING_USER}" "$HOST_CONFIG_PATH" || true
+  sudo chmod 600 "$HOST_CONFIG_PATH" || true
+  info "Set ${HOST_CONFIG_PATH} -> owner ${INVOKING_USER}, perms 600"
+fi
 
-  # Compose: n8n configured to generate HTTPS URLs (host=DOMAIN, protocol=https, port=443)
+# Also tighten whole data dir
+sudo chmod -R 700 "$DATA_DIR" || true
+sudo chown -R "${INVOKING_USER}:${INVOKING_USER}" "$DATA_DIR" || true
+
+# Compose writing: TLS or HTTP-only
+if [ "$DNS_MATCH" = "yes" ] && [ -n "$DOMAIN" ]; then
+  info "Writing TLS-enabled compose (Caddy + n8n) with recommended envs..."
   cat > "$COMPOSE_FILE" <<EOF
 version: "3.8"
 
@@ -220,6 +217,10 @@ services:
       - N8N_PROTOCOL=https
       - N8N_PORT=443
       - WEBHOOK_TUNNEL_URL=https://${DOMAIN}
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
+      - DB_SQLITE_POOL_SIZE=5
+      - N8N_RUNNERS_ENABLED=true
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=true
     volumes:
       - ${DATA_DIR}:/home/node/.n8n
       - ${BACKUP_DIR}:/backups
@@ -243,7 +244,6 @@ volumes:
   caddy_config:
 EOF
 
-  # Write Caddyfile (reverse-proxy to internal port)
   cat > "$CADDYFILE" <<EOF
 ${DOMAIN} {
   reverse_proxy n8n:${INTERNAL_N8N_PORT}
@@ -251,25 +251,18 @@ ${DOMAIN} {
 }
 EOF
 
-  # Ownership & perms
   sudo chown "${INVOKING_USER}:${INVOKING_USER}" "$COMPOSE_FILE" "$CADDYFILE"
   sudo chmod 600 "$COMPOSE_FILE" "$CADDYFILE"
 
-  # Start stack
-  info "Bringing up stack (this will let Caddy request TLS certificates)."
+  info "Starting TLS stack (Caddy will obtain certs)..."
   cd "$COMPOSE_DIR" || exit 1
   $DOCKER_COMPOSE_CMD pull || true
   $DOCKER_COMPOSE_CMD down >/dev/null 2>&1 || true
   $DOCKER_COMPOSE_CMD up -d
 
-  info "If certificate issuance fails, check DNS and ports 80/443 (firewall)."
   info "Open: https://${DOMAIN}"
-
 else
-  info "Writing HTTP-only docker-compose (N8N_SECURE_COOKIE=false to avoid cookie warning)."
-
-  # Use explicit host port from HOST_HTTP_PORT variable
-  # Force secure cookie to false (either env override or default false here)
+  info "Writing HTTP-only compose with recommended envs (secure-cookie disabled to avoid warning)..."
   if [ "${FORCE_SECURE_COOKIE:-}" = "false" ]; then
     SEC_COOK_VAL="false"
   else
@@ -295,6 +288,10 @@ services:
       - N8N_BASIC_AUTH_USER=${N8N_USER_FINAL}
       - N8N_BASIC_AUTH_PASSWORD=${N8N_PASS_FINAL}
       - N8N_SECURE_COOKIE=${SEC_COOK_VAL}
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
+      - DB_SQLITE_POOL_SIZE=5
+      - N8N_RUNNERS_ENABLED=true
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=true
       - TZ=Etc/UTC
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${INTERNAL_N8N_PORT}/healthz"]
@@ -306,15 +303,15 @@ EOF
   sudo chown "${INVOKING_USER}:${INVOKING_USER}" "$COMPOSE_FILE"
   sudo chmod 600 "$COMPOSE_FILE"
 
-  info "Starting n8n (HTTP-only)..."
+  info "Starting HTTP-only n8n..."
   cd "$COMPOSE_DIR" || exit 1
   $DOCKER_COMPOSE_CMD pull || true
   $DOCKER_COMPOSE_CMD down >/dev/null 2>&1 || true
   $DOCKER_COMPOSE_CMD up -d
 
-  info "n8n is available at: http://$(hostname -I | awk '{print $1}'):${HOST_HTTP_PORT}"
+  info "n8n available at: http://$(hostname -I | awk '{print $1}'):${HOST_HTTP_PORT}"
 fi
 
 info ""
-info "Completed. Check logs: docker logs -f n8n"
+info "Done. Check logs: docker logs -f n8n"
 info "Check compose status: ${DOCKER_COMPOSE_CMD} ps"
