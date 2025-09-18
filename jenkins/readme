@@ -23,3 +23,6 @@ sudo curl -L -o install-jenkins.sh https://raw.githubusercontent.com/satyamsonke
 
 # Run only install-jenkins.sh file
 sudo sh install-jenkins.sh 
+
+
+########## 30Sec wait for password ######### automatic will appear ######### 
