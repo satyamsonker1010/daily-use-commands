@@ -1,15 +1,18 @@
-version: "3.8"
+version: '3.8'
 services:
   jenkins:
-    image: jenkins/jenkins:lts
     container_name: jenkins
-    restart: unless-stopped
+    image: jenkins-custom:v1
+    privileged: true
+    user: root
+    restart: always
     ports:
-      - "8080:8080"
-      - "50000:50000"
+      # - 443:443
+      # - 80:80
+      - 8080:8080
+      - 50000:50000
     volumes:
-      - jenkins_backup_volume:/var/jenkins_home
-      # Optional: allow Jenkins to run docker commands on the host (see warnings below)
+      - /mnt/ebs/jenkins:/var/jenkins_home
       - /var/run/docker.sock:/var/run/docker.sock
-volumes:
-  jenkins_backup_volume:
+    # environment:
+    #   JENKINS_OPTS: --httpPort=80 --httpsRedirectHttp --httpsPort=443 --httpsKeyStore=/var/jenkins_home/jenkins_keystore.jks --httpsKeyStorePassword=adminkeystorepass
