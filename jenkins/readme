@@ -1,2 +1,25 @@
-# After running container run this command
-sudo docker exec -it {{container_name}} cat /var/jenkins_home/secrets/initialAdminPassword
+# Install docker jusl run this command download this file and execute this file via sh command
+sudo curl -L -o docker-install.sh https://raw.githubusercontent.com/satyamsonker1010/daily-use-commands/main/docker-intstall.sh
+
+# add ubuntu user to docker group
+sudo usermod -aG docker ubuntu
+
+# Refresh Group
+newgrp docker
+
+# make jenkins folder
+sudo mkdir jenkins
+
+# Move inside the jenkins folder
+ cd jenkins/
+
+# Now download jenkins fils
+sudo curl -L -o Dockerfile https://raw.githubusercontent.com/satyamsonker1010/daily-use-commands/main/jenkins/Dockerfile 
+
+sudo curl -L -o docker-compose.yml https://raw.githubusercontent.com/satyamsonker1010/daily-use-commands/main/jenkins/docker-compose.yml
+
+sudo curl -L -o install-jenkins.sh https://raw.githubusercontent.com/satyamsonker1010/daily-use-commands/main/jenkins/install-jenkins.sh
+
+
+# Run only install-jenkins.sh file
+sudo sh install-jenkins.sh 
