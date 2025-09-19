@@ -1,0 +1,10 @@
+# Just simple rum start.sh file vis sh command.
+sudo sh start.sh
+
+# Then will ask for some details. Like username  , password for redisinsight and password for redis.
+
+# Redis insight is simple ui so there we not need username or password. So we are using nginx start secure our redis insight path.
+
+# Now just vist in your server ip. it will ask username or password. So add username or passowrd that provie in start when you run start.sh file. 
+
+# Now see magic redis insight ui is available ther you can add your redis connecion and can use easily and manage.
