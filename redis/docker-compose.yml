@@ -34,5 +34,3 @@ services:
 
 volumes:
   redis-data:
-
-                                                                                                                                                                     37,0-1        Bot
