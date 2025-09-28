@@ -64,5 +64,3 @@ echo "All done."
 echo "Access RedisInsight via: http://localhost/"
 echo "You will be prompted for username/password (the UI credentials you entered)."
 echo "Redis is exposed on port 6379 (requirepass is set)."
-
-                                                                                                                                                                     65,0-1        Bot
