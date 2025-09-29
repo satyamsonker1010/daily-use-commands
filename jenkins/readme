@@ -1,5 +1,5 @@
 # Install docker jusl run this command download this file and execute this file via sh command
-sudo curl -L -o docker-install.sh https://raw.githubusercontent.com/satyamsonker1010/daily-use-commands/main/docker-intstall.sh
+sudo curl -L -o docker-install.sh https://raw.githubusercontent.com/satyamsonker1010/daily-use-commands/main/docker-install.sh
 
 # add ubuntu user to docker group
 sudo usermod -aG docker ubuntu
