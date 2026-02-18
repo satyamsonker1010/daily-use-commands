@@ -2,6 +2,12 @@
 
 set -e
 
+# ===== Ask for Worker Name =====
+read -p "Enter Worker Node Name (example: worker-1): " NODE_NAME
+hostnamectl set-hostname $NODE_NAME
+
+echo "===== Hostname Set to $NODE_NAME ====="
+
 echo "===== Disable Swap ====="
 swapoff -a
 sed -i '/ swap / s/^/#/' /etc/fstab
@@ -50,4 +56,4 @@ apt-mark hold kubelet kubeadm kubectl
 systemctl enable kubelet
 
 echo "===== Worker Ready ====="
-echo "Now run the kubeadm join command from master node output."
+echo "Now run the kubeadm join command from master node."
