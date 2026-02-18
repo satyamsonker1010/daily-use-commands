@@ -112,6 +112,11 @@ kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/
 
 # --------------------------------------------------
 
+print_step "Ensuring Workloads Do NOT Run on Master Node"
+
+kubectl taint nodes $(hostname) node-role.kubernetes.io/control-plane=:NoSchedule --overwrite
+
+
 print_step "Cluster Setup Completed Successfully 🎉"
 
 echo ""
