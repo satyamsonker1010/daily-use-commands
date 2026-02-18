@@ -2,6 +2,17 @@
 
 set -e
 
+print_step "Setting Master Hostname"
+
+read -p "Enter Master Node Name (example: master-node): " MASTER_NAME
+
+hostnamectl set-hostname $MASTER_NAME
+
+echo ""
+echo "✅ Hostname successfully set to: $MASTER_NAME"
+echo ""
+
+
 print_step() {
   echo ""
   echo "=================================================================="
